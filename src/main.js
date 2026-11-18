@@ -79,8 +79,12 @@ class MakeMeCubeMasterApp {
     // 4. Setup Header Utility Buttons synchronously
     this.setupHeaderActions();
 
-    // 5. Navigate to Step 1 immediately so UI renders without delay
-    this.goToStep(1);
+    // 5. Navigate to Step 2 immediately so live camera and scanner are ready on launch
+    if (this.appState.hasSavedCalibration) {
+      this.goToStep(2);
+    } else {
+      this.goToStep(1);
+    }
 
     // 6. Start Video Camera Stream asynchronously in the background
     this.startCameraInBackground();
@@ -207,6 +211,31 @@ class MakeMeCubeMasterApp {
       });
     }
 
+    // Interactive Stepper Navigation (Step 1, Step 2, Step 3)
+    if (this.stepper1) {
+      this.stepper1.classList.add('cursor-pointer');
+      this.stepper1.addEventListener('click', () => {
+        this.appState.sounds.playClick();
+        this.goToStep(1);
+      });
+    }
+    if (this.stepper2) {
+      this.stepper2.classList.add('cursor-pointer');
+      this.stepper2.addEventListener('click', () => {
+        this.appState.sounds.playClick();
+        this.goToStep(2);
+      });
+    }
+    if (this.stepper3) {
+      this.stepper3.classList.add('cursor-pointer');
+      this.stepper3.addEventListener('click', () => {
+        if (this.appState.solution) {
+          this.appState.sounds.playClick();
+          this.goToStep(3);
+        }
+      });
+    }
+
     // Camera Fallback Buttons
     const btnRetry = document.getElementById('btn-request-cam-again');
     if (btnRetry) {
@@ -260,7 +289,11 @@ class MakeMeCubeMasterApp {
       this.scanningUI.initViewfinderProbes();
     }
 
-    this.goToStep(1);
+    if (this.appState.hasSavedCalibration) {
+      this.goToStep(2);
+    } else {
+      this.goToStep(1);
+    }
   }
 
   showCameraFallback(errorMsg) {
@@ -277,11 +310,7 @@ class MakeMeCubeMasterApp {
     if (this.step2El) this.step2El.classList.toggle('hidden', stepNumber !== 2);
     if (this.step3El) this.step3El.classList.toggle('hidden', stepNumber !== 3);
 
-    // Minimize top header cards during active scanning (Step 2) to give maximum clearance to the camera viewfinder
-    const switcherCard = document.getElementById('header-switcher-card');
-    const stepperCard = document.getElementById('header-stepper-card');
-    if (switcherCard) switcherCard.classList.toggle('hidden', stepNumber === 2);
-    if (stepperCard) stepperCard.classList.toggle('hidden', stepNumber === 2);
+    // Keep top puzzle switcher and stepper cards visible for seamless navigation
 
     // Update 3-Step Stepper in Top Bar
     this.updateStepperUI(stepNumber);

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>CubeMate - 3×3 Rubik's Cube & Pyraminx 3D Scanner & Solver</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>" />
+  <!-- Tailwind CSS CDN for high-velocity UI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // GitHub Pages static fallback loader
+    if (!window.location.port && window.location.hostname.includes('github.io')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = './assets/index-BeZWY_3N.css';
+      document.head.appendChild(link);
+
+      const s = document.createElement('script');
+      s.type = 'module';
+      s.crossOrigin = 'anonymous';
+      s.src = './assets/index-B1CjED3T.js';
+      document.head.appendChild(s);
+    }
+  </script>
+  <script type="module" crossorigin src="./assets/index-B1CjED3T.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BeZWY_3N.css">
+</head>
+<body class="bg-slate-950 text-white overflow-hidden select-none">
+
+  <!-- Fullscreen Live Camera Background -->
+  <video id="camera-feed" playsinline autoplay muted></video>
+
+  <!-- Dark Translucent Overlay -->
+  <div class="camera-overlay"></div>
+
+  <!-- App Wrapper Layer -->
+  <div class="relative z-10 w-full h-[100dvh] flex flex-col justify-between p-2 sm:p-4 pb-[max(0.6rem,env(safe-area-inset-bottom))] max-w-xl mx-auto overflow-hidden pointer-events-none">
+
+    <!-- Top Header & 3-Step Progress Stepper (Pointer events enabled for buttons) -->
+    <header class="flex flex-col gap-1.5 sm:gap-2.5 w-full pointer-events-auto shrink-0">
+      <!-- Top Bar: App Title & Quick Utility Controls -->
+      <div class="glass-card px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl flex items-center justify-between shadow-lg">
+        <div class="flex items-center gap-2 sm:gap-2.5">
+          <!-- Cube Logo Icon -->
+          <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-xs sm:text-sm font-black tracking-tight text-white flex items-center gap-1.5">
+              CubeMate
+              <span class="text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">v1.0</span>
+            </h1>
+            <p id="app-subtitle" class="text-[9px] sm:text-[10px] text-slate-400">3×3 Camera Scanner & Solver</p>
+          </div>
+        </div>
+
+        <!-- Quick Action Buttons -->
+        <div class="flex items-center gap-1.5">
+          <!-- Demo Cube Quick Button -->
+          <button id="btn-demo-cube" class="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white/10 hover:bg-white/20 text-cyan-300 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Try Scrambled Demo Cube">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span id="demo-btn-label" class="hidden sm:inline">Demo 3×3</span>
+          </button>
+
+          <!-- Flip Camera Button (Front/Back) -->
+          <button id="btn-flip-camera" class="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold transition active:scale-95 cursor-pointer" title="Flip Camera (Front/Back)">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
+
+          <!-- Torch Button -->
+          <button id="btn-toggle-torch" class="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold transition active:scale-95 cursor-pointer hidden" title="Toggle Flashlight">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </button>
+
+          <!-- Sound Mute/Unmute -->
+          <button id="btn-toggle-sound" class="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold transition active:scale-95 cursor-pointer" title="Toggle Sound">
+            <svg id="icon-sound-on" class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+            </svg>
+            <svg id="icon-sound-off" class="w-3.5 h-3.5 sm:w-4 sm:h-4 hidden text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Puzzle Switcher: 3x3 Rubik's Cube vs Pyraminx -->
+      <div id="header-switcher-card" class="glass-card p-0.5 sm:p-1 rounded-xl sm:rounded-2xl flex items-center shadow-md bg-black/40 border border-white/10 transition-all duration-200">
+        <button id="btn-select-3x3" class="flex-1 py-1 sm:py-1.5 px-2.5 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-cyan-500/25 scale-[1.02]" title="Standard 3x3 Rubik's Cube">
+          <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+          </svg>
+          <span>3×3 Cube</span>
+        </button>
+        <button id="btn-select-pyraminx" class="flex-1 py-1 sm:py-1.5 px-2.5 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold text-slate-400 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-white/5" title="Pyraminx (Tetrahedron)">
+          <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3L2 20h20L12 3z"/>
+          </svg>
+          <span>Pyraminx</span>
+        </button>
+      </div>
+
+      <!-- 3-Step Progress Stepper -->
+      <div id="header-stepper-card" class="glass-card px-2 py-1 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl flex items-center justify-between gap-1 shadow-md transition-all duration-200">
+        <!-- Step 1: Colour Calibration -->
+        <div id="stepper-step-1" class="stepper-item flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-1 px-1.5 sm:px-2 rounded-lg sm:rounded-xl transition-all bg-white/10 text-white font-bold border border-white/20">
+          <span class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-cyan-400 text-slate-950 flex items-center justify-center text-[9px] sm:text-[10px] font-black">1</span>
+          <span class="text-[10px] sm:text-[11px] truncate">Colour Calibration</span>
+        </div>
+
+        <div class="w-2 sm:w-3 h-[1px] bg-white/20 shrink-0"></div>
+
+        <!-- Step 2: Scanning -->
+        <div id="stepper-step-2" class="stepper-item flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-1 px-1.5 sm:px-2 rounded-lg sm:rounded-xl transition-all text-slate-400 font-medium">
+          <span class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-white/10 text-slate-300 flex items-center justify-center text-[9px] sm:text-[10px] font-bold">2</span>
+          <span class="text-[10px] sm:text-[11px] truncate">Scanning</span>
+        </div>
+
+        <div class="w-2 sm:w-3 h-[1px] bg-white/20 shrink-0"></div>
+
+        <!-- Step 3: Solution -->
+        <div id="stepper-step-3" class="stepper-item flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-1 px-1.5 sm:px-2 rounded-lg sm:rounded-xl transition-all text-slate-400 font-medium">
+          <span class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-white/10 text-slate-300 flex items-center justify-center text-[9px] sm:text-[10px] font-bold">3</span>
+          <span class="text-[10px] sm:text-[11px] truncate">Solution</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Dynamic Content Views (Step 1, Step 2, Step 3) -->
+    <main class="flex-1 min-h-0 flex flex-col justify-between py-0.5 sm:py-2 w-full relative pointer-events-auto overflow-hidden">
+
+      <!-- Step 1 Container: Colour Calibration View -->
+      <div id="step-1-container" class="w-full flex-1 min-h-0 flex items-center justify-center overflow-y-auto"></div>
+
+      <!-- Step 2 Container: 6-Face Scanning View -->
+      <div id="step-2-container" class="w-full h-full flex flex-col justify-between overflow-hidden hidden">
+        <!-- Top HUD Card (SCAN 1/6 + 6 miniature 3x3 thumbnails) -->
+        <div id="scanning-top-hud" class="w-full shrink-0"></div>
+
+        <!-- Center Viewfinder (Dashed Rounded-Square Bounding Box / Triangle) -->
+        <div class="w-full flex-1 min-h-0 flex items-center justify-center py-1 relative">
+          <div id="viewfinder-box" class="w-[min(82vw,38vh)] h-[min(82vw,38vh)] sm:w-84 sm:h-84 md:w-96 md:h-96 aspect-square relative flex items-center justify-center transition-all duration-200"></div>
+        </div>
+
+        <!-- Live Preview Card (Bottom: X/6, progress bar, live 3x3 grid) -->
+        <div id="scanning-bottom-preview" class="w-full shrink-0"></div>
+      </div>
+
+      <!-- Step 3 Container: 3D Step-by-Step Solution View -->
+      <div id="step-3-container" class="w-full flex-1 min-h-0 flex items-center justify-center overflow-y-auto hidden">
+        <div id="solution-container" class="w-full"></div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- Computing Loading Spinner Modal -->
+  <div id="computing-modal" class="hidden"></div>
+
+  <!-- Step 4: Completion Celebration Modal -->
+  <div id="completion-modal" class="hidden"></div>
+
+  <!-- Camera Permission / WebRTC Fallback Card -->
+  <div id="camera-fallback" class="hidden fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center p-6 text-white text-center">
+    <div class="glass-card p-6 rounded-3xl max-w-sm w-full flex flex-col items-center gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <div>
+        <h3 class="text-lg font-bold">Camera Access Required</h3>
+        <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+          MakeMeCubeMaster needs camera access to scan your Rubik's cube. Alternatively, test the complete app with a virtual demo cube.
+        </p>
+      </div>
+      <div class="w-full flex flex-col gap-2 pt-1">
+        <button id="btn-request-cam-again" class="w-full py-3 px-4 rounded-xl bg-white text-slate-950 font-bold text-xs hover:bg-slate-100 transition active:scale-95 cursor-pointer">
+          Allow Camera & Try Again
+        </button>
+        <button id="btn-fallback-demo" class="w-full py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition active:scale-95 cursor-pointer">
+          Load Scrambled Demo Cube
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Main Entry Point -->
+</body>
+</html>
