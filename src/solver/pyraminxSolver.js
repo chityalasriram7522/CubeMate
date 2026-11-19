@@ -456,7 +456,10 @@ export function buildPyraminxStateFromFaces(faces) {
         foundPiece = p; ori = 1; break;
       }
     }
-    state.edges[slot] = foundPiece >= 0 ? foundPiece : slot;
+    if (foundPiece === -1) {
+      throw new Error(`Invalid Pyraminx edge detected between faces ${curSlot.p1[0]} and ${curSlot.p2[0]} (colors: ${c1}, ${c2}). Please check face orientations.`);
+    }
+    state.edges[slot] = foundPiece;
     state.edgeOri[slot] = ori;
   }
 

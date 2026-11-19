@@ -54,8 +54,8 @@ export const EDGES = [
   { name: 'DB', facelets: [34, 52], colors: ['D', 'B'] },
   { name: 'FR', facelets: [23, 12], colors: ['F', 'R'] },
   { name: 'FL', facelets: [21, 41], colors: ['F', 'L'] },
-  { name: 'BL', facelets: [48, 39], colors: ['B', 'L'] },
-  { name: 'BR', facelets: [50, 14], colors: ['B', 'R'] }
+  { name: 'BL', facelets: [50, 39], colors: ['B', 'L'] },
+  { name: 'BR', facelets: [48, 14], colors: ['B', 'R'] }
 ];
 
 // Corners in cubejs:

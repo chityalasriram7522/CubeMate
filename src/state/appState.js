@@ -3,12 +3,12 @@ import { ColorManager, DEFAULT_CALIBRATION } from '../vision/colorDetector.js';
 import { PYRAMINX_FACE_SEQUENCE } from '../solver/pyraminxSolver.js';
 
 export const SCAN_FACE_SEQUENCE = [
-  { key: 'U', name: 'Top', colorName: 'White', center: 'U', instruction: 'Hold WHITE face facing camera. Keep GREEN facing DOWN.' },
-  { key: 'R', name: 'Right', colorName: 'Red', center: 'R', instruction: 'Turn cube LEFT to show RED face. Keep GREEN facing DOWN.' },
-  { key: 'F', name: 'Front', colorName: 'Green', center: 'F', instruction: 'Turn cube LEFT to show GREEN face. Keep WHITE facing UP.' },
-  { key: 'D', name: 'Bottom', colorName: 'Yellow', center: 'D', instruction: 'Tilt cube UP to show YELLOW face. Keep GREEN facing UP.' },
-  { key: 'L', name: 'Left', colorName: 'Orange', center: 'L', instruction: 'Turn cube to show ORANGE face. Keep WHITE facing UP.' },
-  { key: 'B', name: 'Back', colorName: 'Blue', center: 'B', instruction: 'Turn cube to show BLUE face. Keep WHITE facing UP.' }
+  { key: 'F', name: 'Front', colorName: 'Green', center: 'F', instruction: 'Hold GREEN in front • WHITE on top, YELLOW at bottom, RED on right' },
+  { key: 'R', name: 'Right', colorName: 'Red', center: 'R', instruction: 'Turn cube 90° LEFT to RED • WHITE stays on top, BLUE on right' },
+  { key: 'B', name: 'Back', colorName: 'Blue', center: 'B', instruction: 'Turn cube 90° LEFT to BLUE • WHITE stays on top, ORANGE on right' },
+  { key: 'L', name: 'Left', colorName: 'Orange', center: 'L', instruction: 'Turn cube 90° LEFT to ORANGE • WHITE stays on top, GREEN on right' },
+  { key: 'U', name: 'Top', colorName: 'White', center: 'U', instruction: 'Tilt cube DOWN to WHITE • BLUE at top, GREEN at bottom, RED on right' },
+  { key: 'D', name: 'Bottom', colorName: 'Yellow', center: 'D', instruction: 'Tilt cube UP to YELLOW • GREEN at top, BLUE at bottom, RED on right' }
 ];
 
 class SoundEffects {
@@ -211,13 +211,29 @@ export class AppState {
     }
     this.sounds.playSnap();
     this.notify('FACE_CAPTURED', { faceKey, colors9 });
+  }
 
+  confirmAndNextFace() {
+    this.sounds.playClick();
     const total = this.getTotalFaces();
     if (this.scanIndex < total - 1) {
       this.scanIndex++;
       this.notify('SCAN_INDEX_CHANGED', this.scanIndex);
     } else {
       this.notify('ALL_FACES_SCANNED');
+    }
+  }
+
+  retakeCurrentFace() {
+    this.sounds.playClick();
+    const sequence = this.getActiveFaceSequence();
+    const currentFace = sequence[this.scanIndex];
+    if (currentFace) {
+      this.scannedFaces[currentFace.key] = null;
+      if (this.scannedDetails[currentFace.key]) {
+        this.scannedDetails[currentFace.key] = null;
+      }
+      this.notify('FACE_RETAKE', { faceKey: currentFace.key });
     }
   }
 

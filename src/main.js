@@ -95,7 +95,7 @@ class MakeMeCubeMasterApp {
 
   async startCameraInBackground() {
     try {
-      const camRes = await this.camera.startCamera('user');
+      const camRes = await this.camera.startCamera('environment');
       if (camRes && camRes.success) {
         if (this.camera.hasTorch && this.torchBtn) {
           this.torchBtn.classList.remove('hidden');
@@ -132,6 +132,32 @@ class MakeMeCubeMasterApp {
           const sequence = this.appState.getActiveFaceSequence();
           const face = sequence[idx] || sequence[0];
           this.autoCapture.setExpectedCenter(face.center || face.key);
+          const isCaptured = this.appState.scannedFaces[face.key] !== null;
+          this.autoCapture.setPaused(isCaptured);
+          this.scanningUI.renderTopHud();
+          this.scanningUI.renderBottomPreview();
+        },
+        onConfirmNextFace: () => {
+          this.appState.confirmAndNextFace();
+          const sequence = this.appState.getActiveFaceSequence();
+          const nextFace = sequence[this.appState.scanIndex] || sequence[0];
+          this.autoCapture.setExpectedCenter(nextFace.center || nextFace.key);
+          const isCaptured = this.appState.scannedFaces[nextFace.key] !== null;
+          this.autoCapture.setPaused(isCaptured);
+          this.scanningUI.renderTopHud();
+          this.scanningUI.renderBottomPreview();
+        },
+        onRetakeFace: () => {
+          this.appState.retakeCurrentFace();
+          this.autoCapture.setPaused(false);
+          this.scanningUI.renderTopHud();
+          this.scanningUI.renderBottomPreview();
+        },
+        onToggleAutoCapture: (enabled) => {
+          this.autoCapture.enabled = enabled;
+        },
+        onAutoBalanceRequested: () => {
+          this.autoBalanceAndRefresh();
         },
         onSolveRequested: () => this.computeSolutionAndLaunch()
       }
@@ -426,20 +452,28 @@ class MakeMeCubeMasterApp {
     this.scanningUI.triggerCaptureFlash();
     this.appState.saveCapturedFace(currentFace.key, capturedColorKeys, classifiedDetails);
 
+    // Pause auto-capture while user reviews and confirms this face
+    this.autoCapture.setPaused(true);
+
     this.scanningUI.renderTopHud();
     this.scanningUI.renderBottomPreview();
+  }
 
-    // Check if all faces are scanned
-    const total = this.appState.getTotalFaces();
-    const allScanned = Object.values(this.appState.scannedFaces).filter(Boolean).length === total;
-    if (allScanned) {
-      this.computeSolutionAndLaunch();
+  autoBalanceAndRefresh() {
+    this.appState.sounds.playClick();
+    if (this.appState.puzzleType === 'pyraminx') {
+      autoBalancePyraminxFaces(this.appState.scannedFaces, this.appState.scannedDetails);
     } else {
-      // Set next expected center
-      const nextSequence = this.appState.getActiveFaceSequence();
-      const nextFace = nextSequence[this.appState.scanIndex] || nextSequence[0];
-      this.autoCapture.setExpectedCenter(nextFace.center || nextFace.key);
+      const faceletString = this.appState.getFaceletString();
+      if (faceletString) {
+        const balanced = autoBalanceCubeFacelets(faceletString, this.appState.getFlatDetailsList());
+        if (balanced) {
+          this.appState.setFaceletString(balanced);
+        }
+      }
     }
+    this.scanningUI.renderTopHud();
+    this.scanningUI.renderBottomPreview();
   }
 
   async computeSolutionAndLaunch() {

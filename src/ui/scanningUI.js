@@ -15,7 +15,12 @@ export class ScanningUI {
     this.onFaceSelected = callbacks.onFaceSelected || (() => {});
     this.onAllFacesReady = callbacks.onAllFacesReady || (() => {});
     this.onSolveRequested = callbacks.onSolveRequested || (() => {});
+    this.onConfirmNextFace = callbacks.onConfirmNextFace || (() => {});
+    this.onRetakeFace = callbacks.onRetakeFace || (() => {});
+    this.onToggleAutoCapture = callbacks.onToggleAutoCapture || (() => {});
+    this.onAutoBalanceRequested = callbacks.onAutoBalanceRequested || (() => {});
 
+    this.autoCaptureEnabled = true;
     this.editingTileIndex = null;
     this.editingFaceKey = null;
 
@@ -151,6 +156,27 @@ export class ScanningUI {
 
   // Update live viewfinder dots with classified color
   updateProbes(classifiedColors) {
+    const sequence = this.appState.getActiveFaceSequence();
+    const currentFace = sequence[this.appState.scanIndex];
+    const captured = currentFace ? this.appState.scannedFaces[currentFace.key] : null;
+
+    if (captured && captured.length === 9) {
+      // Freeze probe display on captured face colors
+      this.probeElements.forEach((el, i) => {
+        const key = captured[i];
+        const dot = el.querySelector('.probe-dot');
+        const text = el.querySelector('.probe-text');
+        if (dot && text && key) {
+          const hex = COLOR_DISPLAY[key]?.hex || '#333';
+          dot.style.backgroundColor = hex;
+          dot.style.borderColor = '#10b981';
+          text.innerText = key;
+          text.style.color = key === 'U' || key === 'D' ? '#000' : '#FFF';
+        }
+      });
+      return;
+    }
+
     if (!classifiedColors || classifiedColors.length !== 9) return;
     this.probeElements.forEach((el, i) => {
       const c = classifiedColors[i];
@@ -272,7 +298,46 @@ export class ScanningUI {
     return tileColorKey ? (COLOR_DISPLAY[tileColorKey]?.hex || '#334155') : '#334155';
   }
 
-  // Render Bottom Preview Card: Status + Action Button + Mini Grid (Comfortable & Prominent)
+  getColorTallies() {
+    const isPyraminx = this.appState.puzzleType === 'pyraminx';
+    const keys = isPyraminx ? ['F', 'R', 'B', 'D'] : ['U', 'R', 'F', 'D', 'L', 'B'];
+    const tallies = {};
+    keys.forEach(k => { tallies[k] = 0; });
+
+    Object.values(this.appState.scannedFaces).forEach(faceColors => {
+      if (Array.isArray(faceColors)) {
+        faceColors.forEach(c => {
+          if (tallies[c] !== undefined) tallies[c]++;
+        });
+      }
+    });
+
+    return tallies;
+  }
+
+  renderNetFaceMini(faceKey) {
+    const face = this.appState.scannedFaces[faceKey];
+    if (!face || face.length !== 9) {
+      return `
+        <div class="grid grid-cols-3 grid-rows-3 gap-[1px] p-0.5 bg-black/60 rounded border border-white/20 w-11 h-11">
+          ${Array(9).fill(0).map(() => '<div class="bg-slate-700 rounded-[1px]"></div>').join('')}
+        </div>
+      `;
+    }
+    return `
+      <div class="grid grid-cols-3 grid-rows-3 gap-[1px] p-0.5 bg-black/80 rounded border border-white/20 w-11 h-11 sm:w-12 sm:h-12 shadow" title="${faceKey} Face (Tap sticker to edit)">
+        ${face.map((colorKey, idx) => `
+          <div class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-[1px] cursor-pointer hover:scale-125 transition-transform"
+               style="background-color: ${COLOR_DISPLAY[colorKey]?.hex || '#333'}"
+               data-tile-index="${idx}"
+               data-face-key="${faceKey}">
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Render Bottom Preview Card: Live Camera / Face Confirmation / Full Net Review
   renderBottomPreview() {
     const sequence = this.appState.getActiveFaceSequence();
     const currentIndex = this.appState.scanIndex;
@@ -282,129 +347,321 @@ export class ScanningUI {
     const allScanned = Object.values(this.appState.scannedFaces).filter(Boolean).length === totalFaces;
     const isPyraminx = this.appState.puzzleType === 'pyraminx';
 
-    this.bottomPreviewEl.innerHTML = `
-      <div class="glass-card hud-bottom-card px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl sm:rounded-3xl max-w-xl w-full mx-auto text-white shadow-2xl flex flex-col gap-2.5 border border-white/15">
-        <!-- Status Line -->
-        <div class="flex items-center justify-between text-xs sm:text-sm font-bold">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-cyan-400 font-mono font-black">${currentIndex + 1}/${totalFaces} Faces</span>
-            <span class="text-slate-400">•</span>
-            <span id="auto-capture-status" class="text-slate-200 font-semibold truncate max-w-[200px] sm:max-w-none">${allScanned ? 'All faces scanned!' : 'Hold steady inside frame...'}</span>
+    // 1. STATE 1: ALL 6 FACES SCANNED -> FULL NET REVIEW SCREEN
+    if (allScanned) {
+      const tallies = this.getColorTallies();
+      const is3x3 = !isPyraminx;
+      const isPerfect = Object.values(tallies).every(count => count === 9);
+
+      this.bottomPreviewEl.innerHTML = `
+        <div class="glass-card hud-bottom-card px-3.5 py-3 sm:px-5 sm:py-3.5 rounded-2xl sm:rounded-3xl max-w-xl w-full mx-auto text-white shadow-2xl flex flex-col gap-2.5 border border-white/20 animate-fade-in max-h-[46vh] sm:max-h-[50vh] overflow-y-auto">
+          <!-- Top Header -->
+          <div class="flex items-center justify-between pb-1 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <div class="w-3 h-3 rounded-full ${isPerfect ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}"></div>
+              <h3 class="text-xs sm:text-sm font-black uppercase tracking-wide text-white">
+                ${is3x3 ? '6-Face Cube Review' : 'Pyraminx Review'}
+              </h3>
+            </div>
+            <span class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full ${isPerfect ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">
+              ${isPerfect ? '✓ 100% Balanced' : '⚠️ Adjust Glare'}
+            </span>
           </div>
 
-          <!-- Progress Meter -->
-          <div class="w-20 sm:w-28 bg-white/15 rounded-full h-1.5 sm:h-2 overflow-hidden shrink-0">
-            <div id="capture-progress-fill" class="bg-gradient-to-r from-cyan-400 to-emerald-400 h-full rounded-full transition-all duration-150" style="width: ${allScanned ? '100%' : '0%'}"></div>
+          <!-- Color Tallies Row -->
+          <div class="grid grid-cols-6 gap-1 sm:gap-1.5 py-1 px-2 bg-black/40 rounded-xl border border-white/10">
+            ${(is3x3 ? ['U', 'R', 'F', 'D', 'L', 'B'] : ['F', 'R', 'B', 'D']).map(k => {
+              const count = tallies[k] || 0;
+              const meta = COLOR_DISPLAY[k] || DEFAULT_CALIBRATION[k];
+              const ok = count === 9;
+              return `
+                <div class="flex flex-col items-center gap-0.5">
+                  <div class="w-5 h-5 sm:w-6 sm:h-6 rounded-md flex items-center justify-center font-bold text-[10px] sm:text-xs shadow" style="background-color: ${meta.hex}; color: ${k === 'U' || k === 'D' ? '#000' : '#FFF'}">
+                    ${k}
+                  </div>
+                  <span class="text-[9px] sm:text-[10px] font-mono font-black ${ok ? 'text-emerald-400' : 'text-amber-400 underline'}">
+                    ${count}/9
+                  </span>
+                </div>
+              `;
+            }).join('')}
           </div>
-        </div>
 
-        <!-- Bottom Action Row: Mini Grid + Capture Face Button + Nav Buttons -->
-        <div class="flex items-center justify-between gap-2.5 pt-0.5">
-          <!-- Live Color Preview (Pyraminx Triangle or 3x3 Grid) -->
-          ${isPyraminx ? `
-            <div id="live-color-grid" class="flex flex-col items-center gap-[2px] p-2 bg-black/70 rounded-xl border border-white/20 shrink-0 cursor-pointer shadow-md hover:border-cyan-400 transition" title="Tap tile to fix color">
+          <!-- Unfolded Net View (Cross Layout for 3x3) -->
+          ${is3x3 ? `
+            <div class="flex flex-col items-center gap-1 py-1">
+              <span class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Unfolded Net (Tap sticker to edit)</span>
+              <!-- Row 1: U (Top) -->
               <div class="flex justify-center">
-                <div class="live-tile w-3 h-3 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 0)}" data-tile-index="0"></div>
+                ${this.renderNetFaceMini('U')}
               </div>
-              <div class="flex justify-center gap-[2px]">
-                <div class="live-tile w-3 h-3 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 1)}" data-tile-index="1"></div>
-                <div class="live-tile w-3 h-3 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 2)}" data-tile-index="2"></div>
-                <div class="live-tile w-3 h-3 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 3)}" data-tile-index="3"></div>
+              <!-- Row 2: L, F, R, B -->
+              <div class="flex justify-center gap-1 sm:gap-1.5">
+                ${this.renderNetFaceMini('L')}
+                ${this.renderNetFaceMini('F')}
+                ${this.renderNetFaceMini('R')}
+                ${this.renderNetFaceMini('B')}
               </div>
-              <div class="flex justify-center gap-[2px]">
-                <div class="live-tile w-2.5 h-2.5 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 4)}" data-tile-index="4"></div>
-                <div class="live-tile w-2.5 h-2.5 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 5)}" data-tile-index="5"></div>
-                <div class="live-tile w-2.5 h-2.5 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 6)}" data-tile-index="6"></div>
-                <div class="live-tile w-2.5 h-2.5 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 7)}" data-tile-index="7"></div>
-                <div class="live-tile w-2.5 h-2.5 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, 8)}" data-tile-index="8"></div>
+              <!-- Row 3: D (Bottom) -->
+              <div class="flex justify-center">
+                ${this.renderNetFaceMini('D')}
               </div>
             </div>
           ` : `
-            <div id="live-color-grid" class="grid grid-cols-3 grid-rows-3 gap-[2px] w-10 h-10 p-1.5 bg-black/70 rounded-xl border border-white/20 shrink-0 cursor-pointer shadow-md hover:border-cyan-400 transition" title="Tap tile to fix color">
-              ${Array(9).fill(0).map((_, i) => `
-                <div class="live-tile w-2.5 h-2.5 rounded-[2px] cursor-pointer hover:scale-110 transition-transform" style="background-color: ${this.getTileHex(currentFace.key, i)}" data-tile-index="${i}"></div>
+            <div class="grid grid-cols-4 gap-2 py-1">
+              ${['F', 'R', 'B', 'D'].map(faceKey => `
+                <div class="flex flex-col items-center gap-1 p-1 bg-black/50 rounded-xl border border-white/10">
+                  <span class="text-[10px] font-bold text-slate-300">${faceKey}</span>
+                  ${this.renderNetFaceMini(faceKey)}
+                </div>
               `).join('')}
             </div>
           `}
 
-          <!-- Center Action Button (Capture / Solve) -->
-          <div class="flex-1">
-            ${allScanned ? `
-              <button id="btn-solve-now" class="w-full py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 font-black text-sm sm:text-base shadow-xl hover:opacity-95 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer shadow-emerald-500/30">
-                <svg class="w-4 h-4 sm:w-5 sm:h-5 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                <span>Solve ${isPyraminx ? 'Pyraminx' : 'Cube'}</span>
+          <!-- Action Buttons -->
+          <div class="flex flex-col gap-2 pt-1 border-t border-white/10">
+            ${isPerfect ? `
+              <button id="btn-solve-now" class="w-full py-3 px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 font-black text-sm sm:text-base shadow-xl hover:opacity-95 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer shadow-emerald-500/30">
+                <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span>Solve Cube (15–20 Optimal Moves) 🚀</span>
               </button>
             ` : `
-              <button id="btn-manual-capture" class="w-full py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-white text-slate-950 font-black text-sm sm:text-base shadow-xl hover:bg-slate-100 active:scale-95 transition flex items-center justify-center gap-2.5 cursor-pointer">
-                <div class="w-3 h-3 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/50 animate-pulse"></div>
-                <span>${isCaptured ? 'Retake Face' : 'Capture Face'}</span>
+              <button id="btn-autofix-glare" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl hover:opacity-95 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer shadow-amber-500/25">
+                <svg class="w-4 h-4 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span>Auto-Fix Lighting Glare & Balance to 9 Each</span>
               </button>
             `}
-          </div>
 
-          <!-- Prev / Next Navigation -->
-          <div class="flex items-center gap-1.5 shrink-0">
-            ${currentIndex > 0 ? `
-              <button id="btn-prev-face" class="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-100 transition active:scale-95 cursor-pointer" title="Previous Face">
-                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+            <div class="flex gap-2">
+              <button id="btn-retake-any" class="flex-1 py-2 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-semibold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span>Rescan a Face</span>
               </button>
-            ` : `
-              <div class="w-8 sm:w-9"></div>
-            `}
-            ${currentIndex < totalFaces - 1 ? `
-              <button id="btn-next-face" class="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-100 transition active:scale-95 cursor-pointer" title="Next Face">
-                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
-              </button>
-            ` : ''}
+              ${!isPerfect ? `
+                <button id="btn-force-solve" class="py-2 px-3 rounded-xl bg-white/15 hover:bg-white/20 text-white text-xs font-bold transition active:scale-95 cursor-pointer">
+                  Solve Anyway
+                </button>
+              ` : ''}
+            </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
 
-    const solveNowBtn = this.bottomPreviewEl.querySelector('#btn-solve-now');
-    if (solveNowBtn) {
-      solveNowBtn.addEventListener('click', () => {
-        this.appState.sounds.playClick();
-        this.onSolveRequested();
-      });
-    }
+      const solveNowBtn = this.bottomPreviewEl.querySelector('#btn-solve-now');
+      if (solveNowBtn) {
+        solveNowBtn.addEventListener('click', () => {
+          this.appState.sounds.playClick();
+          this.onSolveRequested();
+        });
+      }
 
-    const captureBtn = this.bottomPreviewEl.querySelector('#btn-manual-capture');
-    if (captureBtn) {
-      captureBtn.addEventListener('click', () => {
-        this.onManualCapture();
-      });
-    }
+      const autoFixBtn = this.bottomPreviewEl.querySelector('#btn-autofix-glare');
+      if (autoFixBtn) {
+        autoFixBtn.addEventListener('click', () => {
+          this.onAutoBalanceRequested();
+        });
+      }
 
-    const prevBtn = this.bottomPreviewEl.querySelector('#btn-prev-face');
-    if (prevBtn) {
-      prevBtn.addEventListener('click', () => {
-        if (this.appState.scanIndex > 0) {
-          this.appState.scanIndex--;
+      const forceSolveBtn = this.bottomPreviewEl.querySelector('#btn-force-solve');
+      if (forceSolveBtn) {
+        forceSolveBtn.addEventListener('click', () => {
+          this.appState.sounds.playClick();
+          this.onSolveRequested();
+        });
+      }
+
+      const retakeAnyBtn = this.bottomPreviewEl.querySelector('#btn-retake-any');
+      if (retakeAnyBtn) {
+        retakeAnyBtn.addEventListener('click', () => {
+          this.appState.sounds.playClick();
+          this.appState.scanIndex = 0;
           this.renderTopHud();
           this.renderBottomPreview();
-          this.onFaceSelected(this.appState.scanIndex);
-        }
-      });
-    }
+          this.onFaceSelected(0);
+        });
+      }
 
-    const nextBtn = this.bottomPreviewEl.querySelector('#btn-next-face');
-    if (nextBtn) {
-      nextBtn.addEventListener('click', () => {
-        if (this.appState.scanIndex < totalFaces - 1) {
-          this.appState.scanIndex++;
-          this.renderTopHud();
+    // 2. STATE 2: CURRENT FACE CAPTURED -> REVIEW & CONFIRM CARD
+    } else if (isCaptured) {
+      const faceColors = this.appState.scannedFaces[currentFace.key];
+      this.bottomPreviewEl.innerHTML = `
+        <div class="glass-card hud-bottom-card px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl sm:rounded-3xl max-w-xl w-full mx-auto text-white shadow-2xl flex flex-col gap-3 border border-emerald-500/30 animate-fade-in">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
+              <span class="text-xs sm:text-sm font-black text-emerald-400">
+                ✓ ${currentFace.name} (${currentFace.colorName}) Face Captured
+              </span>
+            </div>
+            <span class="text-[10px] sm:text-xs text-slate-300 font-mono font-bold bg-white/10 px-2 py-0.5 rounded-full">
+              Face ${currentIndex + 1} of ${totalFaces}
+            </span>
+          </div>
+
+          <!-- Middle Row: Interactive 9-Sticker Preview + Verification Notice -->
+          <div class="flex items-center justify-between gap-3 bg-black/40 p-2.5 rounded-xl border border-white/10">
+            <!-- 9-Sticker Grid -->
+            <div class="grid grid-cols-3 grid-rows-3 gap-1 shrink-0 p-1 bg-black/60 rounded-lg border border-white/15">
+              ${faceColors.map((colorKey, tileIdx) => `
+                <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-[3px] flex items-center justify-center font-black text-[10px] cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white transition-all shadow"
+                     style="background-color: ${COLOR_DISPLAY[colorKey]?.hex || '#333'}; color: ${colorKey === 'U' || colorKey === 'D' ? '#000' : '#FFF'}"
+                     data-tile-index="${tileIdx}"
+                     data-face-key="${currentFace.key}"
+                     title="Tap to change color">
+                  ${colorKey}
+                </div>
+              `).join('')}
+            </div>
+
+            <!-- Hint text -->
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-bold text-white leading-snug">
+                Check against your cube
+              </p>
+              <p class="text-[10px] sm:text-[11px] text-slate-300 mt-0.5 leading-tight">
+                Tap any sticker if room lighting or glare caused a mistake.
+              </p>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-2 pt-0.5">
+            <button id="btn-retake-face" class="py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs sm:text-sm font-bold transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span>Retake</span>
+            </button>
+
+            <button id="btn-confirm-face" class="flex-1 py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer shadow-cyan-500/25">
+              <span>Confirm & Next Face</span>
+              <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+
+      const confirmBtn = this.bottomPreviewEl.querySelector('#btn-confirm-face');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', () => {
+          this.onConfirmNextFace();
+        });
+      }
+
+      const retakeBtn = this.bottomPreviewEl.querySelector('#btn-retake-face');
+      if (retakeBtn) {
+        retakeBtn.addEventListener('click', () => {
+          this.onRetakeFace();
+        });
+      }
+
+    // 3. STATE 3: LIVE CAMERA / NOT YET CAPTURED
+    } else {
+      this.bottomPreviewEl.innerHTML = `
+        <div class="glass-card hud-bottom-card px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl sm:rounded-3xl max-w-xl w-full mx-auto text-white shadow-2xl flex flex-col gap-2.5 border border-white/15">
+          <!-- Status Line -->
+          <div class="flex items-center justify-between text-xs sm:text-sm font-bold">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-cyan-400 font-mono font-black">${currentIndex + 1}/${totalFaces} Faces</span>
+              <span class="text-slate-400">•</span>
+              <span id="auto-capture-status" class="text-slate-200 font-semibold truncate max-w-[200px] sm:max-w-none">
+                Align ${currentFace.name} (${currentFace.colorName} center)
+              </span>
+            </div>
+
+            <!-- Auto-Capture Toggle Pill -->
+            <button id="btn-toggle-autocap" class="px-2 py-0.5 rounded-md text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${this.autoCaptureEnabled ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/10 text-slate-400 border border-white/15'}" title="Toggle Auto-Capture">
+              <span>${this.autoCaptureEnabled ? '⚡ Auto ON' : '📸 Manual'}</span>
+            </button>
+          </div>
+
+          <!-- Progress Meter -->
+          <div class="w-full bg-white/15 rounded-full h-1.5 sm:h-2 overflow-hidden">
+            <div id="capture-progress-fill" class="bg-gradient-to-r from-cyan-400 to-emerald-400 h-full rounded-full transition-all duration-150" style="width: 0%"></div>
+          </div>
+
+          <!-- Action Row: Mini Preview + Capture Face Button + Nav Arrows -->
+          <div class="flex items-center justify-between gap-2.5 pt-0.5">
+            <!-- Mini live preview grid -->
+            <div id="live-color-grid" class="grid grid-cols-3 grid-rows-3 gap-[2px] w-9 h-9 p-1 bg-black/70 rounded-xl border border-white/20 shrink-0 shadow-md">
+              ${Array(9).fill(0).map((_, i) => `
+                <div class="live-tile w-2 h-2 rounded-[1px]" style="background-color: #334155" data-tile-index="${i}"></div>
+              `).join('')}
+            </div>
+
+            <!-- Big Manual Capture Button -->
+            <div class="flex-1">
+              <button id="btn-manual-capture" class="w-full py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-white text-slate-950 font-black text-xs sm:text-sm shadow-xl hover:bg-slate-100 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer">
+                <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/50 animate-pulse"></div>
+                <span>Capture Face</span>
+              </button>
+            </div>
+
+            <!-- Prev / Next Navigation Arrows -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${currentIndex > 0 ? `
+                <button id="btn-prev-face" class="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-100 transition active:scale-95 cursor-pointer" title="Previous Face">
+                  <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+              ` : `
+                <div class="w-8 sm:w-9"></div>
+              `}
+              ${currentIndex < totalFaces - 1 ? `
+                <button id="btn-next-face" class="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-100 transition active:scale-95 cursor-pointer" title="Next Face">
+                  <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+
+      const captureBtn = this.bottomPreviewEl.querySelector('#btn-manual-capture');
+      if (captureBtn) {
+        captureBtn.addEventListener('click', () => {
+          this.onManualCapture();
+        });
+      }
+
+      const autoCapToggleBtn = this.bottomPreviewEl.querySelector('#btn-toggle-autocap');
+      if (autoCapToggleBtn) {
+        autoCapToggleBtn.addEventListener('click', () => {
+          this.autoCaptureEnabled = !this.autoCaptureEnabled;
+          this.onToggleAutoCapture(this.autoCaptureEnabled);
           this.renderBottomPreview();
-          this.onFaceSelected(this.appState.scanIndex);
-        }
-      });
+        });
+      }
+
+      const prevBtn = this.bottomPreviewEl.querySelector('#btn-prev-face');
+      if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+          if (this.appState.scanIndex > 0) {
+            this.appState.scanIndex--;
+            this.renderTopHud();
+            this.renderBottomPreview();
+            this.onFaceSelected(this.appState.scanIndex);
+          }
+        });
+      }
+
+      const nextBtn = this.bottomPreviewEl.querySelector('#btn-next-face');
+      if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+          if (this.appState.scanIndex < totalFaces - 1) {
+            this.appState.scanIndex++;
+            this.renderTopHud();
+            this.renderBottomPreview();
+            this.onFaceSelected(this.appState.scanIndex);
+          }
+        });
+      }
     }
 
-    // Tap tile to open edit palette
+    // Attach click listeners to any sticker tile with data-tile-index
     this.bottomPreviewEl.querySelectorAll('[data-tile-index]').forEach(el => {
       el.addEventListener('click', () => {
         const tileIdx = parseInt(el.getAttribute('data-tile-index'), 10);
-        this.openStickerColorPalette(tileIdx);
+        const faceKey = el.getAttribute('data-face-key') || currentFace.key;
+        this.openStickerColorPalette(tileIdx, faceKey);
       });
     });
   }
@@ -446,10 +703,10 @@ export class ScanningUI {
     }, 50);
   }
 
-  // Manual sticker color correction modal
-  openStickerColorPalette(tileIndex) {
+  // Manual sticker color correction modal (supports specific faceKey)
+  openStickerColorPalette(tileIndex, explicitFaceKey = null) {
     const sequence = this.appState.getActiveFaceSequence();
-    const faceKey = sequence[this.appState.scanIndex].key;
+    const faceKey = explicitFaceKey || sequence[this.appState.scanIndex].key;
     const isPyraminx = this.appState.puzzleType === 'pyraminx';
     const colorChoices = isPyraminx ? ['F', 'R', 'B', 'D'] : ['U', 'D', 'R', 'L', 'F', 'B'];
 
@@ -458,26 +715,30 @@ export class ScanningUI {
 
     const modal = document.createElement('div');
     modal.id = 'sticker-palette-modal';
-    modal.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
+    modal.className = 'fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
 
     modal.innerHTML = `
       <div class="glass-card p-6 rounded-3xl max-w-xs w-full text-white shadow-2xl border border-white/20 flex flex-col gap-4">
         <div class="flex items-center justify-between">
-          <h3 class="text-base font-bold">Edit Tile ${tileIndex + 1} Color</h3>
-          <button id="btn-close-palette" class="p-1 rounded-full hover:bg-white/10 text-slate-400">
+          <div>
+            <h3 class="text-base font-bold">Edit ${faceKey} Face Tile ${tileIndex + 1}</h3>
+            <p class="text-[11px] text-cyan-300">Tap the color matching your cube:</p>
+          </div>
+          <button id="btn-close-palette" class="p-1.5 rounded-full hover:bg-white/10 text-slate-400 cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
             </svg>
           </button>
         </div>
-        <p class="text-xs text-slate-300">Select the correct color for this sticker:</p>
 
         <div class="grid ${isPyraminx ? 'grid-cols-2' : 'grid-cols-3'} gap-2.5">
           ${colorChoices.map(k => {
             const meta = COLOR_DISPLAY[k] || DEFAULT_CALIBRATION[k];
             return `
               <button class="flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 transition active:scale-95 cursor-pointer" data-palette-color="${k}">
-                <div class="w-8 h-8 rounded-lg shadow" style="background-color: ${meta.hex}; color: ${meta.textColor || '#FFF'}"></div>
+                <div class="w-9 h-9 rounded-lg shadow-md flex items-center justify-center font-bold text-xs" style="background-color: ${meta.hex}; color: ${meta.textColor || '#FFF'}">
+                  ${k}
+                </div>
                 <span class="text-[10px] font-semibold">${meta.name}</span>
               </button>
             `;

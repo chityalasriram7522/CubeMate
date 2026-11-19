@@ -4,7 +4,7 @@ export class CameraManager {
   constructor(videoElement) {
     this.video = videoElement;
     this.stream = null;
-    this.facingMode = 'user'; // Defaults to front camera per prompt, easily togglable
+    this.facingMode = 'environment'; // Defaults to back/rear camera for scanning physical puzzles
     this.hasTorch = false;
     this.torchOn = false;
     this.isReady = false;
@@ -14,7 +14,7 @@ export class CameraManager {
     this.ctx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
   }
 
-  async startCamera(preferredFacing = 'user') {
+  async startCamera(preferredFacing = 'environment') {
     this.facingMode = preferredFacing;
     this.stopCamera();
 

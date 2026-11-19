@@ -175,21 +175,22 @@ export class ColorManager {
       };
     }
 
-    // STANDARD 3x3 CUBE MODE: 6 colors: U, R, F, D, L, B
-    const whiteCal = this.calibration.U;
+    // STANDARD 3x3 CUBE MODE: 6 colors: U (White), R (Red), F (Green), D (Yellow), L (Orange), B (Blue)
+    const minVal = Math.min(r, g, b);
+    const maxVal = Math.max(r, g, b);
+    const deltaVal = maxVal - minVal;
 
-    // Check for White: low saturation, relatively high brightness
-    // Or very close to calibrated white
-    const whiteRgbDist = Math.hypot(r - whiteCal.rgb[0], g - whiteCal.rgb[1], b - whiteCal.rgb[2]);
-    const isVeryLowSat = s <= Math.max(0.24, whiteCal.hsv[1] * 1.6);
-    const isBrightEnough = v >= 0.40;
+    // 1. High-precision White detection:
+    // Low saturation with sufficient brightness, or all 3 channels very close under warm/cool lighting
+    const isWhiteAchromatic = (s < 0.28 && v > 0.40) ||
+      (Math.abs(r - g) < 28 && Math.abs(g - b) < 28 && Math.abs(r - b) < 32 && minVal > 110);
 
-    if ((isVeryLowSat && isBrightEnough) || (whiteRgbDist < 45 && s < 0.35)) {
+    if (isWhiteAchromatic) {
       return {
         face: 'U',
         name: 'White',
         colorKey: 'U',
-        confidence: 0.95,
+        confidence: 0.96,
         hex: COLOR_DISPLAY.U.hex,
         sampleHex: rgbToHex(r, g, b),
         rawRgb: [r, g, b],
@@ -197,57 +198,92 @@ export class ColorManager {
       };
     }
 
-    // Chromatic matching against R, F, D, L, B
-    let bestFace = 'U';
-    let bestScore = Infinity;
-    const scores = { U: 80 };
-
-    for (const key of ['R', 'F', 'D', 'L', 'B']) {
-      const cal = this.calibration[key];
-      const hueDiff = circularHueDiff(h, cal.hsv[0]);
-      const satDiff = Math.abs(s - cal.hsv[1]);
-      const valDiff = Math.abs(v - cal.hsv[2]);
-
-      // Weight hue heavily for chromatic distinctions
-      let score = hueDiff * 1.8 + satDiff * 60 + valDiff * 30;
-
-      // Special handling for Red vs Orange:
-      // Red hue is near 0 or 360, Orange hue is near 20-35
-      if (key === 'R' && (h >= 340 || h <= 14)) {
-        score -= 20; // reward strong red hue
-      }
-      if (key === 'L' && (h >= 16 && h <= 42)) {
-        score -= 15; // reward orange hue
-      }
-      if (key === 'D' && (h >= 45 && h <= 70)) {
-        score -= 20; // reward yellow hue
-      }
-      if (key === 'F' && (h >= 85 && h <= 170)) {
-        score -= 20; // reward green hue
-      }
-      if (key === 'B' && (h >= 180 && h <= 260)) {
-        score -= 20; // reward blue hue
-      }
-
-      scores[key] = score;
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestFace = key;
-      }
+    // 2. High-precision Blue detection:
+    if (b > r + 25 && b > g + 10 && h >= 170 && h <= 270) {
+      return {
+        face: 'B',
+        name: 'Blue',
+        colorKey: 'B',
+        confidence: 0.98,
+        hex: COLOR_DISPLAY.B.hex,
+        sampleHex: rgbToHex(r, g, b),
+        rawRgb: [r, g, b],
+        scores: { B: 0 }
+      };
     }
 
-    const confidence = Math.max(0.1, Math.min(1.0, 1 - bestScore / 180));
+    // 3. High-precision Green detection:
+    if (g > r + 15 && g > b + 15 && h >= 75 && h <= 170) {
+      return {
+        face: 'F',
+        name: 'Green',
+        colorKey: 'F',
+        confidence: 0.98,
+        hex: COLOR_DISPLAY.F.hex,
+        sampleHex: rgbToHex(r, g, b),
+        rawRgb: [r, g, b],
+        scores: { F: 0 }
+      };
+    }
+
+    // 4. High-precision Yellow detection (High R, High G, Low B):
+    if (r > 120 && g > 110 && b < Math.min(r, g) * 0.75 && h >= 42 && h <= 75) {
+      return {
+        face: 'D',
+        name: 'Yellow',
+        colorKey: 'D',
+        confidence: 0.97,
+        hex: COLOR_DISPLAY.D.hex,
+        sampleHex: rgbToHex(r, g, b),
+        rawRgb: [r, g, b],
+        scores: { D: 0 }
+      };
+    }
+
+    // 5. High-precision Orange detection (Hue 14 - 42):
+    if (h >= 14 && h < 42 && (s > 0.40 || (r > g && g > b + 20))) {
+      return {
+        face: 'L',
+        name: 'Orange',
+        colorKey: 'L',
+        confidence: 0.95,
+        hex: COLOR_DISPLAY.L.hex,
+        sampleHex: rgbToHex(r, g, b),
+        rawRgb: [r, g, b],
+        scores: { L: 0 }
+      };
+    }
+
+    // 6. High-precision Red detection (Hue 335 - 360 or 0 - 14):
+    if (h >= 335 || h < 14) {
+      return {
+        face: 'R',
+        name: 'Red',
+        colorKey: 'R',
+        confidence: 0.97,
+        hex: COLOR_DISPLAY.R.hex,
+        sampleHex: rgbToHex(r, g, b),
+        rawRgb: [r, g, b],
+        scores: { R: 0 }
+      };
+    }
+
+    // Fallback: nearest calibrated hue
+    let bestFace = 'R';
+    if (h >= 42 && h < 75) bestFace = 'D';
+    else if (h >= 75 && h < 170) bestFace = 'F';
+    else if (h >= 170 && h < 270) bestFace = 'B';
+    else if (h >= 14 && h < 42) bestFace = 'L';
 
     return {
       face: bestFace,
       name: DEFAULT_CALIBRATION[bestFace].name,
       colorKey: bestFace,
-      confidence: Number(confidence.toFixed(2)),
+      confidence: 0.80,
       hex: COLOR_DISPLAY[bestFace].hex,
       sampleHex: rgbToHex(r, g, b),
       rawRgb: [r, g, b],
-      scores
+      scores: {}
     };
   }
 }

@@ -1,8 +1,9 @@
 // Auto-capture & stability detector for MakeMeCubeMaster
+import { DEFAULT_CALIBRATION } from './colorDetector.js';
 
 export class AutoCaptureController {
   constructor(options = {}) {
-    this.requiredDurationMs = options.requiredDurationMs || 1200; // 1.2s steady hold
+    this.requiredDurationMs = options.requiredDurationMs || 1800; // 1.8s steady hold
     this.cooldownMs = options.cooldownMs || 1500; // 1.5s pause after capture
     this.onProgress = options.onProgress || (() => {});
     this.onCapture = options.onCapture || (() => {});
@@ -11,8 +12,9 @@ export class AutoCaptureController {
     this.stableStartTime = 0;
     this.lastCaptureTime = 0;
     this.isCoolingDown = false;
+    this.isPaused = false;
     this.progress = 0;
-    this.expectedCenter = 'U';
+    this.expectedCenter = 'F';
     this.puzzleType = 'cube3x3';
     this.enabled = true;
   }
@@ -27,6 +29,13 @@ export class AutoCaptureController {
     this.reset();
   }
 
+  setPaused(paused) {
+    this.isPaused = paused;
+    if (paused) {
+      this.reset();
+    }
+  }
+
   reset() {
     this.lastColorsKey = '';
     this.stableStartTime = 0;
@@ -35,7 +44,7 @@ export class AutoCaptureController {
   }
 
   processFrame(classifiedColors) {
-    if (!this.enabled || !classifiedColors || classifiedColors.length !== 9) {
+    if (!this.enabled || this.isPaused || !classifiedColors || classifiedColors.length !== 9) {
       this.reset();
       return;
     }
@@ -45,7 +54,7 @@ export class AutoCaptureController {
     // Check cooldown after last snap
     if (now - this.lastCaptureTime < this.cooldownMs) {
       this.progress = 0;
-      this.onProgress(0, 'Next face...');
+      this.onProgress(0, 'Preparing...');
       return;
     }
 
@@ -56,7 +65,9 @@ export class AutoCaptureController {
     if (this.expectedCenter && centerColor && centerColor !== this.expectedCenter) {
       this.stableStartTime = 0;
       this.progress = 0;
-      this.onProgress(0, `Center expected: ${this.expectedCenter}`);
+      const expectedName = DEFAULT_CALIBRATION[this.expectedCenter]?.name || this.expectedCenter;
+      const detectedName = DEFAULT_CALIBRATION[centerColor]?.name || centerColor;
+      this.onProgress(0, `Center is ${detectedName} • Show ${expectedName} face`);
       return;
     }
 
@@ -78,7 +89,8 @@ export class AutoCaptureController {
         this.lastCaptureTime = now;
         this.stableStartTime = 0;
         this.progress = 0;
-        this.onProgress(1.0, 'Captured!');
+        this.isPaused = true;
+        this.onProgress(1.0, 'Captured! Verify stickers');
         this.onCapture(classifiedColors.map(c => c.colorKey), classifiedColors);
       }
     } else {
@@ -95,7 +107,8 @@ export class AutoCaptureController {
     this.lastCaptureTime = performance.now();
     this.stableStartTime = 0;
     this.progress = 0;
-    this.onProgress(1.0, 'Captured!');
+    this.isPaused = true;
+    this.onProgress(1.0, 'Captured! Verify stickers');
     this.onCapture(classifiedColors.map(c => c.colorKey), classifiedColors);
     return true;
   }
