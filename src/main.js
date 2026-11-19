@@ -80,11 +80,7 @@ class MakeMeCubeMasterApp {
     this.setupHeaderActions();
 
     // 5. Navigate to Step 2 immediately so live camera and scanner are ready on launch
-    if (this.appState.hasSavedCalibration) {
-      this.goToStep(2);
-    } else {
-      this.goToStep(1);
-    }
+    this.goToStep(2);
 
     // 6. Start Video Camera Stream asynchronously in the background
     this.startCameraInBackground();
@@ -315,11 +311,8 @@ class MakeMeCubeMasterApp {
       this.scanningUI.initViewfinderProbes();
     }
 
-    if (this.appState.hasSavedCalibration) {
-      this.goToStep(2);
-    } else {
-      this.goToStep(1);
-    }
+    // Ensure we are on Step 2 (Scanning) with viewfinder probes active
+    this.goToStep(2);
   }
 
   showCameraFallback(errorMsg) {

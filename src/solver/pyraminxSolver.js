@@ -420,17 +420,22 @@ export function buildPyraminxStateFromFaces(faces) {
   const rColors = ['F', 'D', 'B'];
   const bColors = ['D', 'R', 'B'];
 
+  const getOri = (arr, val) => {
+    const idx = arr.indexOf(val);
+    return idx >= 0 ? idx : 0;
+  };
+
   // Tips orientation (0, 1, 2)
-  state.tips[0] = (uColors.indexOf(clean.F[0]) + 3) % 3;
-  state.tips[1] = (lColors.indexOf(clean.F[4]) + 3) % 3;
-  state.tips[2] = (rColors.indexOf(clean.F[8]) + 3) % 3;
-  state.tips[3] = (bColors.indexOf(clean.D[0]) + 3) % 3;
+  state.tips[0] = getOri(uColors, clean.F[0]);
+  state.tips[1] = getOri(lColors, clean.F[4]);
+  state.tips[2] = getOri(rColors, clean.F[8]);
+  state.tips[3] = getOri(bColors, clean.D[0]);
 
   // Centers orientation (0, 1, 2)
-  state.centers[0] = (uColors.indexOf(clean.F[2]) + 3) % 3;
-  state.centers[1] = (lColors.indexOf(clean.F[5]) + 3) % 3;
-  state.centers[2] = (rColors.indexOf(clean.F[7]) + 3) % 3;
-  state.centers[3] = (bColors.indexOf(clean.D[2]) + 3) % 3;
+  state.centers[0] = getOri(uColors, clean.F[2]);
+  state.centers[1] = getOri(lColors, clean.F[5]);
+  state.centers[2] = getOri(rColors, clean.F[7]);
+  state.centers[3] = getOri(bColors, clean.D[2]);
 
   // 6 Edges
   const edgeDefs = [

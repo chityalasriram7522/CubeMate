@@ -61,8 +61,9 @@ export class AutoCaptureController {
     const centerIdx = this.puzzleType === 'pyraminx' ? 2 : 4;
     const centerColor = classifiedColors[centerIdx]?.colorKey;
 
-    // Center tile must match target face center (if specified)
-    if (this.expectedCenter && centerColor && centerColor !== this.expectedCenter) {
+    // Center tile must match target face center ONLY on 3x3 Cube (where center tile 4 is mechanically fixed).
+    // On Pyraminx, vertices and axial centers rotate freely, so center matching must NOT block capture.
+    if (this.puzzleType === 'cube3x3' && this.expectedCenter && centerColor && centerColor !== this.expectedCenter) {
       this.stableStartTime = 0;
       this.progress = 0;
       const expectedName = DEFAULT_CALIBRATION[this.expectedCenter]?.name || this.expectedCenter;

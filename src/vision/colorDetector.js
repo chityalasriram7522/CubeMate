@@ -130,48 +130,55 @@ export class ColorManager {
     const [h, s, v] = rgbToHsv(r, g, b);
 
     // PYRAMINX MODE: Only 4 valid colors: F (Green), R (Red), B (Blue), D (Yellow)
-    // NEVER classify glare/shine as White or Orange on Pyraminx
+    // Direct channel dominance and hue quadrant matching (never confused with White or Orange)
     if (puzzleType === 'pyraminx') {
-      const candidates = ['F', 'R', 'B', 'D'];
-      let bestFace = 'F';
-      let bestScore = Infinity;
-      const scores = {};
+      let bestFace = 'R';
+      let conf = 0.95;
 
-      for (const key of candidates) {
-        const cal = this.calibration[key] || DEFAULT_CALIBRATION[key];
-        const hueDiff = circularHueDiff(h, cal.hsv[0]);
-        const satDiff = Math.abs(s - cal.hsv[1]);
-        const valDiff = Math.abs(v - cal.hsv[2]);
-        const rgbDist = Math.hypot(r - cal.rgb[0], g - cal.rgb[1], b - cal.rgb[2]);
-
-        // Weight hue primarily since Pyraminx colors are separated by 60-90 degrees
-        let score = hueDiff * 2.2 + satDiff * 35 + valDiff * 20 + (rgbDist / 255) * 30;
-
-        // Distinct hue quadrant boosts:
-        if (key === 'R' && (h >= 335 || h <= 25)) score -= 30; // Red around 0/360 deg
-        if (key === 'D' && (h >= 28 && h <= 75)) score -= 30;  // Yellow around 50 deg
-        if (key === 'F' && (h >= 80 && h <= 165)) score -= 30; // Green around 130 deg
-        if (key === 'B' && (h >= 170 && h <= 275)) score -= 30; // Blue around 220 deg
-
-        scores[key] = score;
-
-        if (score < bestScore) {
-          bestScore = score;
-          bestFace = key;
-        }
+      // 1. High-precision Blue (Blue channel highest)
+      if ((b > r + 15 && b > g + 10) || (h >= 170 && h <= 270 && b > 60)) {
+        bestFace = 'B';
+        conf = 0.98;
       }
-
-      const confidence = Math.max(0.15, Math.min(1.0, 1 - bestScore / 180));
+      // 2. High-precision Green (Green channel highest)
+      else if ((g > r + 12 && g > b + 12) || (h >= 75 && h <= 170 && g > 60)) {
+        bestFace = 'F';
+        conf = 0.98;
+      }
+      // 3. High-precision Yellow (High R & G, Low B)
+      else if ((r > 100 && g > 90 && b < Math.min(r, g) * 0.75) || (h >= 38 && h < 75 && s > 0.30)) {
+        bestFace = 'D';
+        conf = 0.97;
+      }
+      // 4. High-precision Red (High R, Low G & B)
+      else if ((r > g + 25 && r > b + 25) || (h >= 335 || h < 25)) {
+        bestFace = 'R';
+        conf = 0.96;
+      }
+      // Fallback by circular hue
+      else if (h >= 38 && h < 75) {
+        bestFace = 'D';
+        conf = 0.82;
+      } else if (h >= 75 && h < 170) {
+        bestFace = 'F';
+        conf = 0.82;
+      } else if (h >= 170 && h < 270) {
+        bestFace = 'B';
+        conf = 0.82;
+      } else {
+        bestFace = 'R';
+        conf = 0.82;
+      }
 
       return {
         face: bestFace,
         name: DEFAULT_CALIBRATION[bestFace].name,
         colorKey: bestFace,
-        confidence: Number(confidence.toFixed(2)),
+        confidence: conf,
         hex: COLOR_DISPLAY[bestFace].hex,
         sampleHex: rgbToHex(r, g, b),
         rawRgb: [r, g, b],
-        scores
+        scores: {}
       };
     }
 

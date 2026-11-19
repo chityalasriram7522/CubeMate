@@ -315,7 +315,53 @@ export class ScanningUI {
     return tallies;
   }
 
+  renderPyraminxFaceMini(faceKey) {
+    const face = this.appState.scannedFaces[faceKey];
+    const defaultColor = faceKey === 'F' ? 'F' : (faceKey === 'L' ? 'R' : (faceKey === 'R' ? 'B' : 'D'));
+    const stickers = face && face.length === 9 ? face : Array(9).fill(defaultColor);
+
+    const renderTile = (idx) => {
+      const c = stickers[idx];
+      const meta = COLOR_DISPLAY[c] || DEFAULT_CALIBRATION[c] || { hex: '#334155', textColor: '#FFF' };
+      return `
+        <div class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[2px] flex items-center justify-center font-black text-[8px] cursor-pointer hover:scale-125 transition-transform shadow-sm"
+             style="background-color: ${meta.hex}; color: ${meta.textColor || '#FFF'}"
+             data-tile-index="${idx}"
+             data-face-key="${faceKey}"
+             title="${faceKey} Tile ${idx + 1} (${meta.name || c}) - Tap to edit">
+          ${c}
+        </div>
+      `;
+    };
+
+    return `
+      <div class="flex flex-col items-center gap-[2px] p-1.5 bg-black/80 rounded-xl border border-white/20 shadow-md" title="${faceKey} Face (Tap sticker to edit)">
+        <!-- Row 0: 1 Tip Sticker (0) -->
+        <div class="flex justify-center">
+          ${renderTile(0)}
+        </div>
+        <!-- Row 1: 3 Stickers (1, 2, 3) -->
+        <div class="flex justify-center gap-[2px]">
+          ${renderTile(1)}
+          ${renderTile(2)}
+          ${renderTile(3)}
+        </div>
+        <!-- Row 2: 5 Stickers (4, 5, 6, 7, 8) -->
+        <div class="flex justify-center gap-[2px]">
+          ${renderTile(4)}
+          ${renderTile(5)}
+          ${renderTile(6)}
+          ${renderTile(7)}
+          ${renderTile(8)}
+        </div>
+      </div>
+    `;
+  }
+
   renderNetFaceMini(faceKey) {
+    if (this.appState.puzzleType === 'pyraminx') {
+      return this.renderPyraminxFaceMini(faceKey);
+    }
     const face = this.appState.scannedFaces[faceKey];
     if (!face || face.length !== 9) {
       return `
@@ -369,7 +415,7 @@ export class ScanningUI {
           </div>
 
           <!-- Color Tallies Row -->
-          <div class="grid grid-cols-6 gap-1 sm:gap-1.5 py-1 px-2 bg-black/40 rounded-xl border border-white/10">
+          <div class="grid ${is3x3 ? 'grid-cols-6' : 'grid-cols-4'} gap-1 sm:gap-1.5 py-1 px-2 bg-black/40 rounded-xl border border-white/10">
             ${(is3x3 ? ['U', 'R', 'F', 'D', 'L', 'B'] : ['F', 'R', 'B', 'D']).map(k => {
               const count = tallies[k] || 0;
               const meta = COLOR_DISPLAY[k] || DEFAULT_CALIBRATION[k];
@@ -387,7 +433,7 @@ export class ScanningUI {
             }).join('')}
           </div>
 
-          <!-- Unfolded Net View (Cross Layout for 3x3) -->
+          <!-- Unfolded Net View (Cross Layout for 3x3, 4 Triangular Faces for Pyraminx) -->
           ${is3x3 ? `
             <div class="flex flex-col items-center gap-1 py-1">
               <span class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Unfolded Net (Tap sticker to edit)</span>
@@ -408,11 +454,16 @@ export class ScanningUI {
               </div>
             </div>
           ` : `
-            <div class="grid grid-cols-4 gap-2 py-1">
-              ${['F', 'R', 'B', 'D'].map(faceKey => `
-                <div class="flex flex-col items-center gap-1 p-1 bg-black/50 rounded-xl border border-white/10">
-                  <span class="text-[10px] font-bold text-slate-300">${faceKey}</span>
-                  ${this.renderNetFaceMini(faceKey)}
+            <div class="grid grid-cols-4 gap-1.5 sm:gap-2 py-1">
+              ${[
+                { key: 'F', name: 'Front', color: 'Green' },
+                { key: 'L', name: 'Left', color: 'Red' },
+                { key: 'R', name: 'Right', color: 'Blue' },
+                { key: 'D', name: 'Bottom', color: 'Yellow' }
+              ].map(faceInfo => `
+                <div class="flex flex-col items-center gap-1 p-1 sm:p-1.5 bg-black/50 rounded-xl border border-white/10">
+                  <span class="text-[9px] sm:text-[10px] font-bold text-slate-200 truncate">${faceInfo.name} (${faceInfo.color})</span>
+                  ${this.renderPyraminxFaceMini(faceInfo.key)}
                 </div>
               `).join('')}
             </div>
@@ -423,7 +474,7 @@ export class ScanningUI {
             ${isPerfect ? `
               <button id="btn-solve-now" class="w-full py-3 px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 font-black text-sm sm:text-base shadow-xl hover:opacity-95 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer shadow-emerald-500/30">
                 <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                <span>Solve Cube (15–20 Optimal Moves) 🚀</span>
+                <span>${isPyraminx ? 'Solve Pyraminx 🚀' : 'Solve Cube (15–20 Optimal Moves) 🚀'}</span>
               </button>
             ` : `
               <button id="btn-autofix-glare" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl hover:opacity-95 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer shadow-amber-500/25">
@@ -501,23 +552,54 @@ export class ScanningUI {
 
           <!-- Middle Row: Interactive 9-Sticker Preview + Verification Notice -->
           <div class="flex items-center justify-between gap-3 bg-black/40 p-2.5 rounded-xl border border-white/10">
-            <!-- 9-Sticker Grid -->
-            <div class="grid grid-cols-3 grid-rows-3 gap-1 shrink-0 p-1 bg-black/60 rounded-lg border border-white/15">
-              ${faceColors.map((colorKey, tileIdx) => `
-                <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-[3px] flex items-center justify-center font-black text-[10px] cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white transition-all shadow"
-                     style="background-color: ${COLOR_DISPLAY[colorKey]?.hex || '#333'}; color: ${colorKey === 'U' || colorKey === 'D' ? '#000' : '#FFF'}"
-                     data-tile-index="${tileIdx}"
-                     data-face-key="${currentFace.key}"
-                     title="Tap to change color">
-                  ${colorKey}
+            ${isPyraminx ? `
+              <!-- Triangular 9-Sticker Layout for Pyraminx -->
+              <div class="flex flex-col items-center gap-[2px] shrink-0 p-1 bg-black/60 rounded-xl border border-white/15">
+                <div class="flex justify-center">
+                  <div class="w-6 h-6 rounded-[2px] flex items-center justify-center font-black text-[10px] cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white transition-all shadow"
+                       style="background-color: ${COLOR_DISPLAY[faceColors[0]]?.hex || '#333'}; color: ${COLOR_DISPLAY[faceColors[0]]?.textColor || '#FFF'}"
+                       data-tile-index="0" data-face-key="${currentFace.key}" title="Tap to change color">
+                    ${faceColors[0]}
+                  </div>
                 </div>
-              `).join('')}
-            </div>
+                <div class="flex justify-center gap-[2px]">
+                  ${[1, 2, 3].map(tileIdx => `
+                    <div class="w-6 h-6 rounded-[2px] flex items-center justify-center font-black text-[10px] cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white transition-all shadow"
+                         style="background-color: ${COLOR_DISPLAY[faceColors[tileIdx]]?.hex || '#333'}; color: ${COLOR_DISPLAY[faceColors[tileIdx]]?.textColor || '#FFF'}"
+                         data-tile-index="${tileIdx}" data-face-key="${currentFace.key}" title="Tap to change color">
+                      ${faceColors[tileIdx]}
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="flex justify-center gap-[2px]">
+                  ${[4, 5, 6, 7, 8].map(tileIdx => `
+                    <div class="w-5 h-5 sm:w-6 sm:h-6 rounded-[2px] flex items-center justify-center font-black text-[9px] sm:text-[10px] cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white transition-all shadow"
+                         style="background-color: ${COLOR_DISPLAY[faceColors[tileIdx]]?.hex || '#333'}; color: ${COLOR_DISPLAY[faceColors[tileIdx]]?.textColor || '#FFF'}"
+                         data-tile-index="${tileIdx}" data-face-key="${currentFace.key}" title="Tap to change color">
+                      ${faceColors[tileIdx]}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : `
+              <!-- 9-Sticker Grid for 3x3 -->
+              <div class="grid grid-cols-3 grid-rows-3 gap-1 shrink-0 p-1 bg-black/60 rounded-lg border border-white/15">
+                ${faceColors.map((colorKey, tileIdx) => `
+                  <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-[3px] flex items-center justify-center font-black text-[10px] cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white transition-all shadow"
+                       style="background-color: ${COLOR_DISPLAY[colorKey]?.hex || '#333'}; color: ${colorKey === 'U' || colorKey === 'D' ? '#000' : '#FFF'}"
+                       data-tile-index="${tileIdx}"
+                       data-face-key="${currentFace.key}"
+                       title="Tap to change color">
+                    ${colorKey}
+                  </div>
+                `).join('')}
+              </div>
+            `}
 
             <!-- Hint text -->
             <div class="flex-1 min-w-0">
               <p class="text-xs font-bold text-white leading-snug">
-                Check against your cube
+                Check against your ${isPyraminx ? 'Pyraminx' : 'cube'}
               </p>
               <p class="text-[10px] sm:text-[11px] text-slate-300 mt-0.5 leading-tight">
                 Tap any sticker if room lighting or glare caused a mistake.
@@ -564,7 +646,7 @@ export class ScanningUI {
               <span class="text-cyan-400 font-mono font-black">${currentIndex + 1}/${totalFaces} Faces</span>
               <span class="text-slate-400">•</span>
               <span id="auto-capture-status" class="text-slate-200 font-semibold truncate max-w-[200px] sm:max-w-none">
-                Align ${currentFace.name} (${currentFace.colorName} center)
+                Align ${currentFace.name} (${currentFace.colorName} ${isPyraminx ? 'face' : 'center'})
               </span>
             </div>
 
@@ -582,11 +664,31 @@ export class ScanningUI {
           <!-- Action Row: Mini Preview + Capture Face Button + Nav Arrows -->
           <div class="flex items-center justify-between gap-2.5 pt-0.5">
             <!-- Mini live preview grid -->
-            <div id="live-color-grid" class="grid grid-cols-3 grid-rows-3 gap-[2px] w-9 h-9 p-1 bg-black/70 rounded-xl border border-white/20 shrink-0 shadow-md">
-              ${Array(9).fill(0).map((_, i) => `
-                <div class="live-tile w-2 h-2 rounded-[1px]" style="background-color: #334155" data-tile-index="${i}"></div>
-              `).join('')}
-            </div>
+            ${isPyraminx ? `
+              <div id="live-color-grid" class="flex flex-col items-center gap-[2px] p-1 bg-black/70 rounded-xl border border-white/20 shrink-0 shadow-md">
+                <div class="flex justify-center">
+                  <div class="live-tile w-2 h-2 rounded-[1px]" style="background-color: #334155" data-tile-index="0"></div>
+                </div>
+                <div class="flex justify-center gap-[2px]">
+                  <div class="live-tile w-2 h-2 rounded-[1px]" style="background-color: #334155" data-tile-index="1"></div>
+                  <div class="live-tile w-2 h-2 rounded-[1px]" style="background-color: #334155" data-tile-index="2"></div>
+                  <div class="live-tile w-2 h-2 rounded-[1px]" style="background-color: #334155" data-tile-index="3"></div>
+                </div>
+                <div class="flex justify-center gap-[1px]">
+                  <div class="live-tile w-1.5 h-1.5 rounded-[1px]" style="background-color: #334155" data-tile-index="4"></div>
+                  <div class="live-tile w-1.5 h-1.5 rounded-[1px]" style="background-color: #334155" data-tile-index="5"></div>
+                  <div class="live-tile w-1.5 h-1.5 rounded-[1px]" style="background-color: #334155" data-tile-index="6"></div>
+                  <div class="live-tile w-1.5 h-1.5 rounded-[1px]" style="background-color: #334155" data-tile-index="7"></div>
+                  <div class="live-tile w-1.5 h-1.5 rounded-[1px]" style="background-color: #334155" data-tile-index="8"></div>
+                </div>
+              </div>
+            ` : `
+              <div id="live-color-grid" class="grid grid-cols-3 grid-rows-3 gap-[2px] w-9 h-9 p-1 bg-black/70 rounded-xl border border-white/20 shrink-0 shadow-md">
+                ${Array(9).fill(0).map((_, i) => `
+                  <div class="live-tile w-2 h-2 rounded-[1px]" style="background-color: #334155" data-tile-index="${i}"></div>
+                `).join('')}
+              </div>
+            `}
 
             <!-- Big Manual Capture Button -->
             <div class="flex-1">
